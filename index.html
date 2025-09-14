@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Pousada Gasparin</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 500px; margin: auto; }
+        h2 { text-align: center; }
+        input, button, select { width: 100%; padding: 10px; margin: 5px 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f4f4f4; }
+        .pix { background-color: #e0ffe0; padding: 10px; margin-top: 10px; text-align: center; font-weight: bold; }
+        .checkbox { width: auto; }
+        .aviso { color: red; font-weight: bold; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h2>Pousada Gasparin</h2>
+
+    <div class="pix">
+        Pague aqui via PIX: <span id="chavePix">Pix do Leleco</span>
+    </div>
+
+    <form id="checkinForm">
+        <input type="text" id="nome" placeholder="Nome do hóspede" required>
+        <input type="text" id="telefone" placeholder="Telefone" required>
+        <select id="tipoQuarto" required onchange="atualizarPreco()">
+            <option value="">Selecione o tipo de quarto</option>
+            <option value="Ventilador">Ventilador</option>
+            <option value="Ar Condicionado">Ar Condicionado</option>
+        </select>
+        <input type="text" id="precoQuarto" placeholder="Preço do quarto" readonly>
+        <button type="button" onclick="adicionarHospede()">Registrar Check-in</button>
+    </form>
+
+    <div class="aviso" id="avisoQuartos"></div>
+
+    <h3>Hóspedes Ativos</h3>
+    <table id="tabelaHospedes">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Telefone</th>
+                <th>Tipo de Quarto</th>
+                <th>Preço</th>
+                <th>Pago?</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <button onclick="baixarRegistros()">Baixar Registros</button>
+
+    <script>
+        const precoVentilador = 100;
+        const precoAr = 200;
+        const limiteQuartos = { "Ventilador": 5, "Ar Condicionado": 3 };
+
+        let hospedes = JSON.parse(localStorage.getItem("hospedes")) || [];
+
+        function atualizarPreco() {
+            const tipo = document.getElementById('tipoQuarto').value;
+            const precoInput = document.getElementById('precoQuarto');
+            if (tipo === "Ventilador") precoInput.value = precoVentilador.toFixed(2);
+            else if (tipo === "Ar Condicionado") precoInput.value = precoAr.toFixed(2);
+            else precoInput.value = "";
+        }
+
+        function contarQuartosOcupados(tipo) {
+            return hospedes.filter(h => h.tipoQuarto === tipo).length;
+        }
+
+        function atualizarAviso() {
+            const aviso = document.getElementById("avisoQuartos");
+            let mensagens = [];
+            for (const tipo in limiteQuartos) {
+                const ocupados = contarQuartosOcupados(tipo);
+                if (ocupados >= limiteQuartos[tipo]) {
+                    mensagens.push(`Não há mais quartos disponíveis de ${tipo}.`);
+                }
+            }
+            aviso.innerText = mensagens.join(" ");
+        }
+
+        function atualizarTabela() {
+            const tbody = document.querySelector("#tabelaHospedes tbody");
+            tbody.innerHTML = "";
+            hospedes.forEach((hospede, index) => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `
+                    <td>${hospede.nome}</td>
+                    <td>${hospede.telefone}</td>
+                    <td>${hospede.tipoQuarto}</td>
+                    <td>${hospede.preco.toFixed(2)}</td>
+                    <td>
+                        <input type="checkbox" class="checkbox" ${hospede.pago ? "checked" : ""} onchange="marcarPago(${index}, this.checked)">
+                    </td>
+                    <td><button onclick="checkout(${index})">Check-out</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+            atualizarAviso();
+        }
+
+        function salvarLocalStorage() {
+            localStorage.setItem("hospedes", JSON.stringify(hospedes));
+        }
+
+        function adicionarHospede() {
+            const nome = document.getElementById('nome').value;
+            const telefone = document.getElementById('telefone').value;
+            const tipoQuarto = document.getElementById('tipoQuarto').value;
+            const preco = parseFloat(document.getElementById('precoQuarto').value);
+
+            if (!nome || !telefone || !tipoQuarto || isNaN(preco)) {
+                alert("Preencha todos os campos obrigatórios!");
+                return;
+            }
+
+            const ocupados = contarQuartosOcupados(tipoQuarto);
+            if (ocupados >= limiteQuartos[tipoQuarto]) {
+                alert(`Não há mais quartos disponíveis de ${tipoQuarto}.`);
+                return;
+            }
+
+            const hospede = { nome, telefone, tipoQuarto, preco, pago: false };
+            hospedes.push(hospede);
+            salvarLocalStorage();
+            atualizarTabela();
+            document.getElementById('checkinForm').reset();
+        }
+
+        function marcarPago(index, status) {
+            hospedes[index].pago = status;
+            salvarLocalStorage();
+        }
+
+        function checkout(index) {
+            hospedes.splice(index, 1);
+            salvarLocalStorage();
+            atualizarTabela();
+        }
+
+        function baixarRegistros() {
+            if (hospedes.length === 0) {
+                alert("Não há registros para baixar!");
+                return;
+            }
+
+            let csv = "Nome,Telefone,Tipo de Quarto,Preço,Pago\n";
+            hospedes.forEach(h => {
+                csv += `${h.nome},${h.telefone},${h.tipoQuarto},${h.preco.toFixed(2)},${h.pago ? "Sim" : "Não"}\n`;
+            });
+
+            const blob = new Blob([csv], { type: "text/csv" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "registros_pousada.csv";
+            link.click();
+        }
+
+        // Inicializa tabela ao carregar página
+        atualizarTabela();
+    </script>
+</body>
+</html>
